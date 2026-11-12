@@ -60,7 +60,10 @@ Longer than the other two. One milestone per sitting.
 | M7 | Measure both — k6 load test, record req/s for each | Two real numbers, plus the methodology |
 | M8 | Redis cache-aside on catalogue reads + documented invalidation | Cache hit/miss visible, staleness window stated |
 | M9 | Testcontainers — race test runs against real MySQL + Redis | The bug cannot regress silently |
-| M10 | Docker, deploy, README with the race explained | Live URL, someone else can reproduce the race |
+| M10 | Docker, GitHub Actions CI against real MySQL/Redis/Kafka | Green pipeline on every push |
+| M11 | Kafka — booking events published, notification service consumes async | Booking still succeeds if notification is down |
+| M12 | React frontend — browse shows, pick seats, book, see confirmation | Can complete a booking in a browser, seat conflicts shown live |
+| M13 | Deploy — Docker Compose on EC2 (or Render), frontend on its own host | Live URL for both, README updated with it |
 
 > **M4 is the whole project.** If you skip straight to the fix you will have a booking app
 > with a lock in it and nothing to talk about. Write the failing test first and keep it in
