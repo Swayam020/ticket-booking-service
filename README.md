@@ -6,7 +6,7 @@ on demand, then fixes it two different ways and measures what each fix costs.
 
 **Stack:** Java 17 · Spring Boot · MySQL · Spring Data JPA · Redis · Docker · JUnit 5 · Testcontainers
 
-**Status:** not started · build last, after the other two
+**Status:** M0 done — Spring Boot 4.1 app boots against MySQL 8.4, `/actuator/health` reports `db: UP`
 
 ---
 
@@ -71,42 +71,23 @@ Longer than the other two. One milestone per sitting.
 
 ---
 
-## Setup
+## Run it locally
+
+Needs Java 17 and Podman (or Docker) with `podman compose`.
 
 ```bash
-cd ~/projects/ticket-booking-service
-curl -G https://start.spring.io/starter.zip \
-  -d type=maven-project -d language=java -d javaVersion=17 \
-  -d groupId=com.swayam -d artifactId=booking -d name=booking \
-  -d packageName=com.swayam.booking \
-  -d dependencies=web,data-jpa,mysql,data-redis,security,validation,actuator,testcontainers \
-  -o starter.zip && unzip starter.zip && rm starter.zip
+podman compose up -d db     # MySQL 8.4 on host port 3307
+./mvnw spring-boot:run      # API on :8080
+curl localhost:8080/actuator/health
 ```
+
+> Port **3307**, not 3306: a local MySQL used for coursework already owns 3306.
+
+Tests start their own MySQL in a container (Testcontainers), so they don't need the compose
+database. With Podman, point Testcontainers at its socket:
 
 ```bash
-podman run -d --name booking-mysql -p 3307:3306 \
-  -e MYSQL_ROOT_PASSWORD=booking -e MYSQL_DATABASE=booking docker.io/library/mysql:8.4
-podman run -d --name booking-redis -p 6379:6379 docker.io/library/redis:7
+DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock TESTCONTAINERS_RYUK_DISABLED=true ./mvnw test
 ```
 
-> Port **3307** — the Udemy course's local MySQL 8.4 already owns 3306, and per your RAM
-> notes `mysqld` is started on demand. Don't fight it for the port.
-
-**8 GB of RAM.** MySQL + Redis + the JVM + Testcontainers spinning up two more containers is
-the heaviest thing in this repo set. Stop the ledger and import containers before M9:
-
-```bash
-podman stop ledger-pg import-pg
-```
-
-k6 for M7:
-
-```bash
-sudo dnf install k6    # or: podman run --rm -i docker.io/grafana/k6 run - < script.js
-```
-
-## Git
-
-```bash
-git add -A && git commit -m "docs: project spec and build plan"
-```
+Redis, Spring Security and k6 join at the milestones that need them (M3, M6, M7).
