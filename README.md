@@ -6,7 +6,7 @@ on demand, then fixes it two different ways and measures what each fix costs.
 
 **Stack:** Java 17 · Spring Boot · MySQL · Spring Data JPA · Redis · Docker · JUnit 5 · Testcontainers
 
-**Status:** M0 done — Spring Boot 4.1 app boots against MySQL 8.4, `/actuator/health` reports `db: UP`
+**Status:** M1 done — `Venue` → `Show` → `Seat` (per-show, `AVAILABLE`/`BOOKED`) ← `Booking` on MySQL 8.4. A seat label is unique within a show; `booking.seat_id` is deliberately *not* unique, so the M4 race can happen
 
 ---
 
