@@ -1,0 +1,19 @@
+services:
+  db:
+    image: docker.io/library/mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: booking
+      MYSQL_DATABASE: booking
+    ports:
+      # 3306 belongs to the local MySQL used for coursework
+      - "3307:3306"
+    volumes:
+      - booking-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -pbooking --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  booking-mysql-data:
