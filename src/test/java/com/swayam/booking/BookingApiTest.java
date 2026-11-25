@@ -1,6 +1,9 @@
 package com.swayam.booking;
 
 import com.jayway.jsonpath.JsonPath;
+import com.swayam.booking.account.AppUser;
+import com.swayam.booking.account.AppUserRepository;
+import com.swayam.booking.account.Role;
 import com.swayam.booking.catalog.Seat;
 import com.swayam.booking.catalog.SeatRepository;
 import com.swayam.booking.catalog.Show;
@@ -8,6 +11,7 @@ import com.swayam.booking.catalog.ShowRepository;
 import com.swayam.booking.catalog.Venue;
 import com.swayam.booking.catalog.VenueRepository;
 import com.swayam.booking.reservation.BookingRepository;
+import com.swayam.booking.security.TokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,6 +42,8 @@ class BookingApiTest {
 	@Autowired ShowRepository shows;
 	@Autowired SeatRepository seats;
 	@Autowired BookingRepository bookings;
+	@Autowired AppUserRepository users;
+	@Autowired TokenService tokens;
 
 	private Seat newSeat(String title) {
 		Venue venue = venues.save(new Venue("Grand Hall", "Mumbai"));
@@ -45,17 +51,23 @@ class BookingApiTest {
 		return seats.save(new Seat(show, "C", 7));
 	}
 
-	private ResultActions book(Object seatId, String email) throws Exception {
-		return mvc.perform(post("/api/bookings").contentType(MediaType.APPLICATION_JSON).content("""
-				{"seatId": "%s", "customerEmail": "%s"}""".formatted(seatId, email)));
+	private ResultActions book(Object seatId, AppUser user) throws Exception {
+		return mvc.perform(post("/api/bookings").header("Authorization", TestUsers.bearer(tokens, user))
+				.contentType(MediaType.APPLICATION_JSON).content("""
+						{"seatId": "%s"}""".formatted(seatId)));
+	}
+
+	private ResultActions getBooking(Object bookingId, AppUser user) throws Exception {
+		return mvc.perform(get("/api/bookings/{id}", bookingId).header("Authorization", TestUsers.bearer(tokens, user)));
 	}
 
 	@Test
 	void bookingAFreeSeatSucceedsAndMarksItBooked() throws Exception {
 		Seat seat = newSeat("Hamlet");
 		UUID showId = seat.getShow().getId();
+		AppUser alice = TestUsers.create(users, Role.USER);
 
-		String body = book(seat.getId(), "alice@example.com")
+		String body = book(seat.getId(), alice)
 				.andExpect(status().isCreated())
 				.andExpect(header().string("Location", containsString("/api/bookings/")))
 				.andExpect(jsonPath("$.seatId").value(seat.getId().toString()))
@@ -63,26 +75,26 @@ class BookingApiTest {
 				.andExpect(jsonPath("$.showTitle").value("Hamlet"))
 				.andExpect(jsonPath("$.row").value("C"))
 				.andExpect(jsonPath("$.number").value(7))
-				.andExpect(jsonPath("$.customerEmail").value("alice@example.com"))
+				.andExpect(jsonPath("$.customerEmail").value(alice.getEmail()))
 				.andExpect(jsonPath("$.createdAt").exists())
 				.andReturn().getResponse().getContentAsString();
 		String bookingId = JsonPath.read(body, "$.id");
 
 		mvc.perform(get("/api/shows/{id}/seats", showId))
 				.andExpect(jsonPath("$[0].status").value("BOOKED"));
-		mvc.perform(get("/api/bookings/{id}", bookingId))
+		getBooking(bookingId, alice)
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.id").value(bookingId))
 				.andExpect(jsonPath("$.seatId").value(seat.getId().toString()))
-				.andExpect(jsonPath("$.customerEmail").value("alice@example.com"));
+				.andExpect(jsonPath("$.customerEmail").value(alice.getEmail()));
 	}
 
 	@Test
 	void bookingATakenSeatIs409AndKeepsOneBooking() throws Exception {
 		Seat seat = newSeat("Macbeth");
-		book(seat.getId(), "alice@example.com").andExpect(status().isCreated());
+		book(seat.getId(), TestUsers.create(users, Role.USER)).andExpect(status().isCreated());
 
-		book(seat.getId(), "bob@example.com")
+		book(seat.getId(), TestUsers.create(users, Role.USER))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.error").value("Conflict"))
 				.andExpect(jsonPath("$.message").value("seat already booked"));
@@ -92,24 +104,34 @@ class BookingApiTest {
 
 	@Test
 	void bookingAnUnknownSeatIs404() throws Exception {
-		book(UUID.randomUUID(), "alice@example.com")
+		book(UUID.randomUUID(), TestUsers.create(users, Role.USER))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.message").value("seat not found"));
 	}
 
 	@Test
-	void bookingNeedsAValidEmail() throws Exception {
-		Seat seat = newSeat("Othello");
-
-		book(seat.getId(), "not-an-email")
+	void bookingWithoutASeatIdIs400() throws Exception {
+		mvc.perform(post("/api/bookings").header("Authorization", TestUsers.bearer(tokens, TestUsers.create(users, Role.USER)))
+						.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.message", containsString("customerEmail ")));
-		assertThat(bookings.countBySeatId(seat.getId())).isZero();
+				.andExpect(jsonPath("$.message", containsString("seatId ")));
+	}
+
+	@Test
+	void someoneElsesBookingIs404() throws Exception {
+		Seat seat = newSeat("Othello");
+		String body = book(seat.getId(), TestUsers.create(users, Role.USER))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+
+		getBooking(JsonPath.read(body, "$.id"), TestUsers.create(users, Role.USER))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.message").value("booking not found"));
 	}
 
 	@Test
 	void anUnknownBookingIs404() throws Exception {
-		mvc.perform(get("/api/bookings/{id}", UUID.randomUUID()))
+		getBooking(UUID.randomUUID(), TestUsers.create(users, Role.USER))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.message").value("booking not found"));
 	}

@@ -6,7 +6,7 @@ on demand, then fixes it two different ways and measures what each fix costs.
 
 **Stack:** Java 17 · Spring Boot · MySQL · Spring Data JPA · Redis · Docker · JUnit 5 · Testcontainers
 
-**Status:** M2 done — browse shows, view a show's seat map, book a seat over HTTP. Booking is a deliberate check-then-act with no lock: a seat that is already booked is refused (409), but two concurrent requests can both get through — the race M4 reproduces
+**Status:** M3 done — JWT auth: anyone can browse, a signed-in user books, only an admin creates venues and shows. Booking is a deliberate check-then-act with no lock: a seat that is already booked is refused (409), but two concurrent requests can both get through — the race M4 reproduces
 
 ---
 
@@ -90,18 +90,38 @@ database. With Podman, point Testcontainers at its socket:
 DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock TESTCONTAINERS_RYUK_DISABLED=true ./mvnw test
 ```
 
-## API (M2)
+## API (M3)
 
-| Method | Path | Does |
-|---|---|---|
-| `POST` | `/api/venues` | Create a venue `{name, city}` → 201 |
-| `POST` | `/api/shows` | Create a show and its seat grid `{venueId, title, startsAt, rows (1–26, A–Z), seatsPerRow (1–50)}` → 201 |
-| `GET` | `/api/shows` | All shows by start time, with their venue |
-| `GET` | `/api/shows/{showId}/seats` | The show's seats in order, each `AVAILABLE` or `BOOKED` |
-| `POST` | `/api/bookings` | Book `{seatId, customerEmail}` → 201 + `Location`; 409 if the seat is taken |
-| `GET` | `/api/bookings/{bookingId}` | A booking confirmation |
+| Method | Path | Who | Does |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | anyone | Create an account `{email, password (8–72 chars, ≤ 72 bytes)}` → 201, always role `USER` |
+| `POST` | `/api/auth/login` | anyone | `{email, password}` → `{accessToken, tokenType: "Bearer", expiresIn: 900}` |
+| `GET` | `/api/shows` | anyone | All shows by start time, with their venue |
+| `GET` | `/api/shows/{showId}/seats` | anyone | The show's seats in order, each `AVAILABLE` or `BOOKED` |
+| `POST` | `/api/venues` | admin | Create a venue `{name, city}` → 201 |
+| `POST` | `/api/shows` | admin | Create a show and its seat grid `{venueId, title, startsAt, rows (1–26, A–Z), seatsPerRow (1–50)}` → 201 |
+| `POST` | `/api/bookings` | user | Book `{seatId}` for the token's owner → 201 + `Location`; 409 if the seat is taken |
+| `GET` | `/api/bookings/{bookingId}` | user | Your own booking; anyone else's is 404 |
 
-Errors come back as `{error, message, timestamp}`: 400 invalid body or id, 404 unknown venue/show/seat/booking,
-409 seat already booked. The two `POST` create endpoints become admin-only at M3.
+Send the token as `Authorization: Bearer <accessToken>`. Errors come back as `{error, message, timestamp}`: 400 invalid
+body or id, 401 no/invalid/expired token or wrong login, 403 not an admin, 404 unknown venue/show/seat/booking,
+409 seat already booked or email already registered.
 
-Redis, Spring Security and k6 join at the milestones that need them (M3, M6, M7).
+### How auth works
+
+- Tokens are HS256 JWTs signed and checked by Spring Security's OAuth2 resource server: `sub` = user id, `role` =
+  `USER` or `ADMIN`, 15-minute expiry, no refresh token.
+- Passwords are stored as BCrypt hashes. A login with an unknown email still does one BCrypt check, so the response
+  time doesn't reveal which emails have accounts.
+- Admins can't sign up. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` and that account is created as `ADMIN` at startup.
+- Set `JWT_SECRET` (at least 32 bytes) for any real run. Without it the app signs with a random key and logs a warning,
+  so tokens stop working on every restart.
+
+```bash
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=change-me-please ./mvnw spring-boot:run
+```
+
+> **Upgrading a dev database from M2:** bookings now point at a user (`user_id`), and `ddl-auto=update` never drops the
+> old `customer_email` column, so reset the compose database once: `podman compose down -v && podman compose up -d db`.
+
+Redis and k6 join at the milestones that need them (M6, M7).
