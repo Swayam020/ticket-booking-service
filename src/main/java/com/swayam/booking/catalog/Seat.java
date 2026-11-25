@@ -60,6 +60,10 @@ public class Seat {
 		createdAt = Instant.now();
 	}
 
+	public void markBooked() {
+		status = SeatStatus.BOOKED;
+	}
+
 	public UUID getId() {
 		return id;
 	}
