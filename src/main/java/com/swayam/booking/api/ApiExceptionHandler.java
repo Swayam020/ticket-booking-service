@@ -1,10 +1,13 @@
 package com.swayam.booking.api;
 
 import com.swayam.booking.NotFoundException;
+import com.swayam.booking.UnauthorizedException;
+import com.swayam.booking.account.EmailAlreadyRegisteredException;
 import com.swayam.booking.reservation.SeatAlreadyBookedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,6 +29,21 @@ class ApiExceptionHandler {
 	@ExceptionHandler(SeatAlreadyBookedException.class)
 	ResponseEntity<Dtos.ApiError> handleSeatTaken(SeatAlreadyBookedException e) {
 		return error(HttpStatus.CONFLICT, e.getMessage());
+	}
+
+	@ExceptionHandler(EmailAlreadyRegisteredException.class)
+	ResponseEntity<Dtos.ApiError> handleEmailTaken(EmailAlreadyRegisteredException e) {
+		return error(HttpStatus.CONFLICT, e.getMessage());
+	}
+
+	@ExceptionHandler(UnauthorizedException.class)
+	ResponseEntity<Dtos.ApiError> handleUnauthorized(UnauthorizedException e) {
+		return error(HttpStatus.UNAUTHORIZED, e.getMessage());
+	}
+
+	@ExceptionHandler(AccessDeniedException.class)
+	ResponseEntity<Dtos.ApiError> handleForbidden(AccessDeniedException e) {
+		return error(HttpStatus.FORBIDDEN, "access denied");
 	}
 
 	// every bad field in one response, sorted so the message is stable for clients and tests

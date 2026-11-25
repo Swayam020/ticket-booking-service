@@ -1,6 +1,9 @@
 package com.swayam.booking;
 
 import com.jayway.jsonpath.JsonPath;
+import com.swayam.booking.account.AppUserRepository;
+import com.swayam.booking.account.Role;
+import com.swayam.booking.security.TokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -8,6 +11,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.util.UUID;
 
@@ -27,9 +31,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CatalogApiTest {
 
 	@Autowired MockMvc mvc;
+	@Autowired AppUserRepository users;
+	@Autowired TokenService tokens;
+
+	// creates are ADMIN-only since M3
+	private MockHttpServletRequestBuilder adminPost(String path) {
+		return post(path).header("Authorization", TestUsers.bearer(tokens, TestUsers.create(users, Role.ADMIN)))
+				.contentType(MediaType.APPLICATION_JSON);
+	}
 
 	private String postJson(String path, String body) throws Exception {
-		return mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
+		return mvc.perform(adminPost(path).content(body))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 	}
@@ -83,7 +95,7 @@ class CatalogApiTest {
 
 	@Test
 	void showAtAnUnknownVenueIs404() throws Exception {
-		mvc.perform(post("/api/shows").contentType(MediaType.APPLICATION_JSON).content("""
+		mvc.perform(adminPost("/api/shows").content("""
 						{"venueId": "%s", "title": "Othello", "startsAt": "2026-12-31T14:30:00Z", "rows": 1, "seatsPerRow": 1}"""
 						.formatted(UUID.randomUUID())))
 				.andExpect(status().isNotFound())
@@ -92,7 +104,7 @@ class CatalogApiTest {
 
 	@Test
 	void invalidShowNamesEveryBadField() throws Exception {
-		mvc.perform(post("/api/shows").contentType(MediaType.APPLICATION_JSON).content("""
+		mvc.perform(adminPost("/api/shows").content("""
 						{"venueId": "%s", "title": " ", "startsAt": "2026-12-31T14:30:00Z", "rows": 0, "seatsPerRow": 1}"""
 						.formatted(UUID.randomUUID())))
 				.andExpect(status().isBadRequest())

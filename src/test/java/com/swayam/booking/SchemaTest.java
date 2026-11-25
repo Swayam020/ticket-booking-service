@@ -1,5 +1,8 @@
 package com.swayam.booking;
 
+import com.swayam.booking.account.AppUser;
+import com.swayam.booking.account.AppUserRepository;
+import com.swayam.booking.account.Role;
 import com.swayam.booking.catalog.Seat;
 import com.swayam.booking.catalog.SeatRepository;
 import com.swayam.booking.catalog.SeatStatus;
@@ -33,6 +36,7 @@ class SchemaTest {
 	@Autowired ShowRepository shows;
 	@Autowired SeatRepository seats;
 	@Autowired BookingRepository bookings;
+	@Autowired AppUserRepository users;
 	@Autowired TransactionTemplate tx;
 
 	private Show newShow(String title) {
@@ -43,12 +47,13 @@ class SchemaTest {
 	@Test
 	void bookingLoadsItsSeatShowAndVenue() {
 		Seat seat = seats.save(new Seat(newShow("Hamlet"), "A", 1));
-		UUID bookingId = bookings.save(new Booking(seat, "alice@example.com")).getId();
+		AppUser alice = TestUsers.create(users, Role.USER);
+		UUID bookingId = bookings.save(new Booking(seat, alice)).getId();
 
 		// a fresh transaction, so every association is read back from MySQL rather than the persistence context
 		tx.executeWithoutResult(status -> {
 			Booking booking = bookings.findById(bookingId).orElseThrow();
-			assertThat(booking.getCustomerEmail()).isEqualTo("alice@example.com");
+			assertThat(booking.getUser().getEmail()).isEqualTo(alice.getEmail());
 			assertThat(booking.getCreatedAt()).isNotNull();
 			Seat loaded = booking.getSeat();
 			assertThat(loaded.getRowLabel()).isEqualTo("A");
@@ -95,10 +100,18 @@ class SchemaTest {
 	void aSeatCanBeBookedTwice() {
 		// nothing in the schema stops a double booking; M4 reproduces the race on top of this
 		Seat seat = seats.save(new Seat(newShow("The Tempest"), "C", 7));
-		Booking first = bookings.saveAndFlush(new Booking(seat, "alice@example.com"));
-		Booking second = bookings.saveAndFlush(new Booking(seat, "bob@example.com"));
+		Booking first = bookings.saveAndFlush(new Booking(seat, TestUsers.create(users, Role.USER)));
+		Booking second = bookings.saveAndFlush(new Booking(seat, TestUsers.create(users, Role.USER)));
 
 		assertThat(bookings.findAllById(List.of(first.getId(), second.getId()))).hasSize(2);
+	}
+
+	@Test
+	void anEmailBelongsToOneUser() {
+		AppUser first = TestUsers.create(users, Role.USER);
+
+		assertThatThrownBy(() -> users.saveAndFlush(new AppUser(first.getEmail(), "another-hash", Role.USER)))
+				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
 }

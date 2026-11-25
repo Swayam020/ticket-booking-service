@@ -1,5 +1,6 @@
 package com.swayam.booking.reservation;
 
+import com.swayam.booking.account.AppUser;
 import com.swayam.booking.catalog.Seat;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,9 +29,9 @@ public class Booking {
 	@JoinColumn(name = "seat_id", nullable = false)
 	private Seat seat;
 
-	// replaced by a user reference once M3 adds authentication
-	@Column(name = "customer_email", nullable = false, length = 255)
-	private String customerEmail;
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "user_id", nullable = false)
+	private AppUser user;
 
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
@@ -38,9 +39,9 @@ public class Booking {
 	protected Booking() {
 	}
 
-	public Booking(Seat seat, String customerEmail) {
+	public Booking(Seat seat, AppUser user) {
 		this.seat = seat;
-		this.customerEmail = customerEmail;
+		this.user = user;
 	}
 
 	@PrePersist
@@ -56,8 +57,8 @@ public class Booking {
 		return seat;
 	}
 
-	public String getCustomerEmail() {
-		return customerEmail;
+	public AppUser getUser() {
+		return user;
 	}
 
 	public Instant getCreatedAt() {
